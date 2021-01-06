@@ -1,0 +1,8 @@
+*.json
+*.txt
+.env
+.vscode
+makefile.bat
+build
+uutinfo.spec
+__pycache__
