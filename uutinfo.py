@@ -54,7 +54,7 @@ class Catuutinfo:
         self.target_wmi_class_properties_list = {
             'bios':['Caption','SerialNumber'],
             'cs':['Model','OEMStringArray','SystemSKUNumber'],
-            'os':['Version'],
+            'os':['Version','OSArchitecture'],
         }
         self.wmi_class_where_conditions={
             'bios':{},
@@ -134,6 +134,7 @@ class Catuutinfo:
 #     # print('hello')
         
 help='''
+dump                |  print uutinfo data
 dump                |  print uutinfo data
 query               |  print wmi query string
 export json         |  export uutinfo data as json file
