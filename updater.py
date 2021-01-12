@@ -1,3 +1,5 @@
+from os.path import realpath
+import pathlib
 from win32com.client import Dispatch
 from pathlib import Path
 import re
@@ -7,9 +9,13 @@ from O365 import FileSystemTokenBackend,Account
 import os
 import json
 from distutils.version import LooseVersion
-import rarfile
-import threading
-import multiprocessing as mp
+import zipfile
+import concurrent.futures
+from concurrent.futures import as_completed
+import subprocess
+import sys
+import os
+
 class CommSite:
     def __init__(self) -> None:
         self.account = self.get_account
@@ -17,7 +23,8 @@ class CommSite:
     @property
     def get_credential(self):
         try:
-            with open('credentials.json','r') as f:
+            source = os.path.join(self._resource_path,'credentials.json')
+            with open(source,'r') as f:
                 data = json.load(f)
                 credentials = (data['appid'],data['secret'])
                 return credentials
@@ -25,11 +32,21 @@ class CommSite:
             return None
 
     @property
+    def _resource_path(self):
+        """ Get absolute path to resource, works for dev and for PyInstaller """
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = os.path.abspath(".")
+        return base_path
+
+    @property
     def get_account(self):
-        os.path.realpath('__file__')
-        token_backend = FileSystemTokenBackend(token_path='.',token_filename='o365_token.txt')
+        token_backend = FileSystemTokenBackend(token_path=self._resource_path,token_filename='o365_token.txt')
         credential = self.get_credential
         if token_backend.check_token():
+            print('Authenticated')
             return Account(credentials=credential,token_backend = token_backend)
         else:
             if credential:
@@ -112,24 +129,10 @@ class CommSite:
                     regex_str = self.pws_regex
             if regex_str:
                 match = re.match(regex_str,file.name).groupdict()
-                # print(match)
-                # ver,alph = LooseVersion(match.get('ver')),match.get('alph',None)
-                # if cnt == 0:
-                #     temp_ver,temp_alph = ver,alph
-                #     continue
-                # if ver > temp_ver:
-                #     latest = file
-                #     temp_ver,temp_alph = ver,alph
-                # elif ver == temp_ver:
-                #     if alph > temp_alph:
-                #         latest = file
-                #         temp_ver,temp_alph = ver,alph
-
                 v1 = LooseVersion(match.get('ver')),match.get('alph',None)
                 if cnt == 0:
                     v2 = v1
                     continue
-                # print(v1,v2)
                 if self._version_compartor(v1,v2) == v1:
                     v2 = v1
                     latest = file
@@ -163,28 +166,51 @@ class Updater(CommSite,Catuutinfo):
         return False
 
     @property
-    def get_current_winpvt(self):
+    def get_local_winpvt_list(self):
         pvt_path = None
         if self.is_arm:
             pvt_path = r'C:\Program Files (x86)\Hewlett-Packard'
         else:
             pvt_path = r'C:\Program Files\Hewlett-Packard'
+        p = Path(pvt_path)
+        f = p.rglob('WinPVT.exe')
+        return [_f.parent for _f in f]
 
-        winpvt = Path(pvt_path)
-        if winpvt.exists() and len([i for i in winpvt.glob('Winpvt.exe')])>0:
-            return winpvt.name
-        return None
+    @property
+    def get_current_winpvt(self):
+        current = self._get_latest(self.get_local_winpvt_list)
+        if current: return current.name
+        else: return None
 
     def get_file_version(self,path):
         parser = Dispatch("Scripting.FileSystemObject")
         return parser.GetFileVersion(path)
 
     @property
+    def get_local_pws_list(self):
+        p = Path('C:\\')
+        find_list=['release','powerstresstest*']
+        result_list=[]
+        pws_list=[]
+        for f in find_list:
+            result_list.extend(list(p.glob(f)))
+        
+        if not result_list: return None
+        else:
+            for r in result_list:
+                if r.is_dir:
+                    pws_list.extend(list(r.rglob('PowerStressTest.exe')))
+        return pws_list
+                
+
+    @property
     def get_current_pws(self):
-        pws_path = r'C:\Release\PowerStressTest.exe'
-        if os.path.exists(pws_path):
-            return self.get_file_version(pws_path)
-        return None
+        pws_list = self.get_local_pws_list
+        if not pws_list: return None
+        else:
+            versions = [self.get_file_version(f.absolute()) for f in self.get_local_pws_list]
+        return 'PowerStressTest-'+max(versions)
+
 
     @property
     def get_latest_winpvt(self):
@@ -193,7 +219,8 @@ class Updater(CommSite,Catuutinfo):
         else:
             return super().get_latest_winpvt
 
-    ver_convert = lambda regex_str,source: re.match(regex_str,source).groupdict()
+    def ver_convert(self,regex_str,source):
+        return re.match(regex_str,source).groupdict()
 
     @property
     def is_winpvt_installed(self):
@@ -224,9 +251,9 @@ class Updater(CommSite,Catuutinfo):
 
         regex_str = self.pws_regex
         s_pws =self.ver_convert(regex_str,self.get_latest_pws.name)
-        c_pws = self.ver_convert(regex_str,self.get_current_winpvt)
-        v1 = LooseVersion(s_pws.get('ver')),s_pws.get('alph',None)
-        v2 = LooseVersion(c_pws.get('ver')),c_pws.get('alph',None)
+        c_pws = self.ver_convert(regex_str,self.get_current_pws)
+        v1 = LooseVersion(s_pws.get('ver')),None
+        v2 = LooseVersion(c_pws.get('ver')),None
 
         if v1 == v2:
             return False
@@ -278,7 +305,7 @@ class Updater(CommSite,Catuutinfo):
 
     animation_cnt=0
     animation_complete = None
-    def wait_animation(self,arg):
+    def wait_animation(self):
         import time
         while not self.animation_complete:
             print(self.animation[self.animation_cnt % len(self.animation)], end='\r')
@@ -288,34 +315,68 @@ class Updater(CommSite,Catuutinfo):
 
     def download(self,dest_path,file):
         file_name = file.name
-        with open(os.path.join(dest_path,file_name),'wb') as f:
-            file.download(output=f)
-            return f
+        file_path = os.path.join(dest_path,file_name)
+        print(f'download at {file_path}')
+        if not os.path.exists(file_path):
+            with open(file_path,'wb') as f:
+                file.download(output=f)
+                return f
+        else:
+            with open(file_path,'r') as f:
+                return f
+
+    def find_file_and_dezip(self,path,file):
+        
+        with zipfile.ZipFile(os.path.join(path,file),'r') as zipper:
+            zipper.extractall(path)
+        
+
 
     def check(self):
-        download_files_proc = []
-        dest_path = 'C:'
+        download_files = []
+        dest_path = 'C:\\'
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            if self.pws_can_update:
+                download_files.append(self.get_latest_pws)
+            if self.winpvt_can_update:
+                download_files.append(self.get_latest_winpvt)
 
-        if self.pws_can_update:
-            download_files_proc.append(threading.Thread(target = self.download,args=(dest_path,self.get_latest_pws)))
-# 
-        if self.winpvt_can_update:
-            download_files_proc.append(threading.Thread(target = self.get_latest_winpvt.download,args=(dest_path,)))
+            download_processes = None if not download_files else [executor.submit(self.download,dest_path,file) for file in download_files] 
+            if download_processes:
+                self.animation_complete = False
+                download_animate = executor.submit(self.wait_animation)
+                
+                for process in download_processes:
+                    exception = process.exception() 
+                    if exception:
+                        self.animation_complete = True
+                        print(exception)
+                    if as_completed(process):
+                        result = process.result()
+                        if result.name.lower().find('powerstress')>=0:
+                            executor.submit(self.find_file_and_dezip,dest_path,result.name)    
+                        if result.name.lower().find('winpvt')>=0:
+                            subprocess.run([os.path.realpath(result.name),'/S','/v/qn'])
+                self.animation_complete = True
+                download_animate.cancel()
+            else:
+                print('Nothing to update')
 
-        animation_task = threading.Thread(target=self.wait_animation,args=(None,))
-        if len(download_files_proc)>0:
-            self.animation_complete = False
-            for  _,task in enumerate(download_files_proc):
-                task.start()
-        animation_task.start()
-        for _,task in enumerate(download_files_proc):
-            task.join()
-        self.animation_complete = True
-        animation_task.join()
-
-        
-    
 
 if __name__ == "__main__":
-    Updater().check()
+    cmd = sys.argv
+    cmd.pop()
+    if not cmd:    
+        updater = Updater()
+        print(
+f'''
+                Local                          Server
+Winpvt          {updater.get_current_winpvt}   {updater.get_latest_winpvt}
+PowerStress     {updater.get_current_pws}      {updater.get_latest_pws}
+'''
+        )
+        updater.check()
+        input('Press Enter to finish')
+    else:
+        pass
     
