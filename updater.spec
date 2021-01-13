@@ -4,7 +4,10 @@ block_cipher = None
 
 
 a = Analysis(['updater.py'],
-             pathex=['D:\\Work\\HP_Project\\uutinfo'],
+             pathex=['D:\\Work\\HP_Project\\uutinfo', 
+        'C:\\Program Files (x86)\\Windows Kits\\10\\Redist\\ucrt\\DLLs\\x86',
+        'C:\\Program Files (x86)\\Windows Kits\\10\\Redist\\ucrt\\DLLs\\arm',
+        'C:\\Program Files (x86)\\Windows Kits\\10\\Redist\\ucrt\\DLLs\\x64'],
              binaries=[],
              datas=[('o365_token.txt', '.'),('credentials.json', '.')],
              hiddenimports=[],

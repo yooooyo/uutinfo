@@ -311,7 +311,7 @@ class Updater(CommSite,Catuutinfo):
             print(self.animation[self.animation_cnt % len(self.animation)], end='\r')
             time.sleep(.1)
             self.animation_cnt += 1
-        print('done !                                             ',end='\r')
+        print('done !                                                ',end='\r')
 
     def download(self,dest_path,file):
         file_name = file.name
@@ -356,7 +356,12 @@ class Updater(CommSite,Catuutinfo):
                         if result.name.lower().find('powerstress')>=0:
                             executor.submit(self.find_file_and_dezip,dest_path,result.name)    
                         if result.name.lower().find('winpvt')>=0:
-                            subprocess.run([os.path.realpath(result.name),'/S','/v/qn'])
+                            print('install winpvt')
+                            try:
+                                sb = subprocess.run([os.path.realpath(result.name),'/S','/v/qn'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=True,timeout=60)
+                            except Exception as e:
+                                print(e)
+                            # executor.submit(subprocess.run())
                 self.animation_complete = True
                 download_animate.cancel()
             else:
