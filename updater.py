@@ -459,6 +459,8 @@ help_msg= \
 '''
 double click for auto-update
 -------------------------------------
+commands :
+
 -h                         print help
 -pws    re                 reinstall pws
         in <version>       install specific version
@@ -491,7 +493,9 @@ PowerStress     {updater.get_current_pws}      {updater.get_latest_pws}
     else:
         updater = Updater()
         cmd_l1 = cmd[0]
-        cmd_l2 = cmd[1]
+        if len(cmd)>1:
+            global cmd_l2
+            cmd_l2 = cmd[1]
         if cmd_l1 == '-h':
             print(help_msg)
         elif cmd_l1 == '-pws':
