@@ -1,5 +1,6 @@
 from os.path import realpath
 import pathlib
+from traceback import print_tb
 from win32com.client import Dispatch
 from pathlib import Path
 import re
@@ -101,7 +102,7 @@ class CommSite:
         return [item for item in items]
 
     winpvt_regex = '(?P<name>WinPVT)\s?(?P<full_ver>(?P<ver>(?:\d+\.?)+)(?P<alph>[A-Z]?))\s?(\((x64|x86)\))?(.exe)??'
-    pws_regex = '(?P<name>PowerStressTest)-(?P<full_var>(?P<ver>(?:\d+\.?)+))'
+    pws_regex = '(?P<name>PowerStressTest)-(?P<full_var>(?P<ver>(?:\d+\.?)+\d+))(.zip)?'
 
     def _version_compartor(self,v1,v2):
         num1,alph1 = v1
@@ -201,15 +202,20 @@ class Updater(CommSite,Catuutinfo):
                 if r.is_dir:
                     pws_list.extend(list(r.rglob('PowerStressTest.exe')))
         return pws_list
-                
+
+    @property
+    def get_current_pws_file(self):
+        pws_list = self.get_local_pws_list
+        if not pws_list: return None
+        versions = [self.get_file_version(f.as_posix()) for f in pws_list]
+        return [f for f in pws_list if self.get_file_version(f.absolute()) == max(versions)][0]
 
     @property
     def get_current_pws(self):
-        pws_list = self.get_local_pws_list
-        if not pws_list: return None
-        else:
-            versions = [self.get_file_version(f.absolute()) for f in self.get_local_pws_list]
-        return 'PowerStressTest-'+max(versions)
+        pws = self.get_current_pws_file
+        if not pws: return None
+        version = self.get_file_version(pws.as_posix())
+        return 'PowerStressTest-'+version
 
 
     @property
@@ -259,6 +265,78 @@ class Updater(CommSite,Catuutinfo):
             return False
         else:
             return self._version_compartor(v1,v2) == v1
+
+    def pws_uninstall(self,version=None,dest='C:\\'):
+        local_pws_list = self.get_local_pws_list
+        try:
+            if not local_pws_list: 
+                print('No PowerStressTest Tool install') 
+                return True
+            else:
+                uninstall_file = None
+                if version:
+                    for f in local_pws_list:
+                        file_version = self.get_file_version(f.as_posix())
+                        if file_version == version:
+                            uninstall_file = f
+                            break
+                    else:
+                        print('Not find target version')
+                        print(f'But currently we have under {dest} :')
+                        print("\n".join([self.get_file_version(p.as_posix()) for p in local_pws_list]))
+                        return False
+                else:
+                    uninstall_file = self.get_current_pws_file
+                delete_folder = None
+                if uninstall_file.parent.parent.name.lower().find('powerstress')>=0:
+                    delete_folder = uninstall_file.parent.parent
+                else: delete_folder = uninstall_file.parent
+                from shutil import rmtree
+                rmtree(delete_folder.as_posix())
+                return not delete_folder.exists()
+        except Exception as e:
+            print(e)
+            return False
+
+
+    def pws_install(self,version,dest='C:\\'):
+        f =  [f for f in self.get_pws_list if self.ver_convert(self.pws_regex,f.name)['ver'] == version]
+        print(f)
+        if f and len(f) == 1: f = f[0]
+        else:
+            print(f'not found PowerStress - {version}')
+            print('But we have :')
+            print('But we have :')
+            return False
+        f = self.download(dest,f)
+        self.find_file_and_dezip(dest,f.name)
+        if self.ver_convert(self.pws_regex,self.get_current_pws)['ver'] == version:return True
+        return False
+
+    def pws_reinstall(self):
+        dest = 'C:\\'
+        curr = self.get_current_pws
+        if not curr:
+            print('Not install PowerStressTest tool under C:\\') 
+            return False
+        try:
+            find_curr = [f for f in self.get_pws_list if f.name.find(curr)>=0]
+            if find_curr:
+                find_curr = find_curr[0]
+                f = self.download(dest,find_curr)
+                self.find_file_and_dezip(dest,f.name)
+        except Exception as e:
+            print(e)
+            return False
+        return True
+        
+    def pws_update(self):
+        if self.pws_can_update:
+            self.pws_uninstall(self.ver_convert(self.pws_regex,self.get_current_pws)['ver'])
+            self.pws_install(self.ver_convert(self.pws_regex,self.get_latest_pws)['ver'])
+
+    def winpvt_install(self,file):
+        pass
 
     animation = [
      "downloading [                    ]",
@@ -313,17 +391,27 @@ class Updater(CommSite,Catuutinfo):
             self.animation_cnt += 1
         print('done !                                                ',end='\r')
 
-    def download(self,dest_path,file):
-        file_name = file.name
-        file_path = os.path.join(dest_path,file_name)
-        print(f'download at {file_path}')
-        if not os.path.exists(file_path):
-            with open(file_path,'wb') as f:
-                file.download(output=f)
-                return f
-        else:
-            with open(file_path,'r') as f:
-                return f
+    def download(self,dest_path,file,overwrite = True):
+        try:
+            file_name = file.name
+            file_path = os.path.join(dest_path,file_name)
+            print(f'download at {file_path}')
+
+            mode = 'r'
+            if overwrite and os.path.exists(file_path) or not os.path.exists(file_path):
+                mode = 'wb'
+            
+            with open(file_path,mode) as f:
+                if mode == 'r':
+                    print(f'Already exist {file_name}')
+                    return f
+                else:
+                    file.download(output=f)
+                    print('Download finish')
+                    return f
+        except Exception as e:
+            print(e)
+            print('Download Fail')
 
     def find_file_and_dezip(self,path,file):
         
@@ -367,10 +455,27 @@ class Updater(CommSite,Catuutinfo):
             else:
                 print('Nothing to update')
 
+help_msg= \
+'''
+double click for auto-update
+-------------------------------------
+-h                         print help
+-pws    re                 reinstall pws
+        in <version>       install specific version
+        up                 update    pws
+        un                 uninstall pws
+        un <version>       uninstall specific version
+        list               list pws versions can be install
+-pvt    re                 reinstall winpvt
+        in <version>       install specific version
+        up                 update    winpvt
+        un                 uninstall winpvt
+        list               list pvt versions
+'''
 
-if __name__ == "__main__":
+def run():
     cmd = sys.argv
-    cmd.pop()
+    cmd.pop(0)
     if not cmd:    
         updater = Updater()
         print(
@@ -381,7 +486,42 @@ PowerStress     {updater.get_current_pws}      {updater.get_latest_pws}
 '''
         )
         updater.check()
+        print('for more info please use -h')
         input('Press Enter to finish')
     else:
-        pass
+        updater = Updater()
+        cmd_l1 = cmd[0]
+        cmd_l2 = cmd[1]
+        if cmd_l1 == '-h':
+            print(help_msg)
+        elif cmd_l1 == '-pws':
+            if cmd_l2 == 're':
+                updater.pws_reinstall()
+            elif cmd_l2 == 'in':
+                version = cmd[2]
+                updater.pws_install(version)
+            elif cmd_l2 == 'up':
+                updater.pws_update()
+            elif cmd_l2 == 'un':
+                if len(cmd) ==3: 
+                    updater.pws_uninstall(cmd[2])
+                else:
+                    updater.pws_uninstall()
+            elif cmd_l2 == 'list':
+                print('PowerStressTest versions on server :')
+                print('\n'.join([updater.ver_convert(updater.pws_regex,f.name)['ver'] for f in updater.get_pws_list]))
+        elif cmd_l1 == '-pvt':
+            pass
+        else:
+            print(help_msg)
+
+
+def test():
+    u = Updater()
+    print(u.pws_uninstall())
+
+if __name__ == "__main__":
+    run()
+    # test()
+
     
