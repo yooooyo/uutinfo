@@ -1,6 +1,7 @@
 *.json
 *.txt
 .env
+.env32
 .vscode
 makefile.bat
 build

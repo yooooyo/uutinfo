@@ -266,14 +266,15 @@ class Updater(CommSite,Catuutinfo):
         else:
             return self._version_compartor(v1,v2) == v1
 
-    def pws_uninstall(self,version=None,dest='C:\\'):
+    def pws_uninstall(self,version=None,file=None,dest='C:\\'):
         local_pws_list = self.get_local_pws_list
         try:
+            uninstall_file = None
             if not local_pws_list: 
                 print('No PowerStressTest Tool install') 
                 return True
             else:
-                uninstall_file = None
+
                 if version:
                     for f in local_pws_list:
                         file_version = self.get_file_version(f.as_posix())
@@ -285,6 +286,8 @@ class Updater(CommSite,Catuutinfo):
                         print(f'But currently we have under {dest} :')
                         print("\n".join([self.get_file_version(p.as_posix()) for p in local_pws_list]))
                         return False
+                elif file:
+                    uninstall_file = file
                 else:
                     uninstall_file = self.get_current_pws_file
                 delete_folder = None
@@ -412,6 +415,7 @@ class Updater(CommSite,Catuutinfo):
         except Exception as e:
             print(e)
             print('Download Fail')
+            raise e
 
     def find_file_and_dezip(self,path,file):
         
@@ -425,6 +429,8 @@ class Updater(CommSite,Catuutinfo):
         dest_path = 'C:\\'
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
             if self.pws_can_update:
+                current_pws = self.get_current_pws_file
+                if current_pws: self.pws_uninstall(file=self.get_current_pws_file)
                 download_files.append(self.get_latest_pws)
             if self.winpvt_can_update:
                 download_files.append(self.get_latest_winpvt)
@@ -450,6 +456,7 @@ class Updater(CommSite,Catuutinfo):
                             except Exception as e:
                                 print(e)
                             # executor.submit(subprocess.run())
+                    
                 self.animation_complete = True
                 download_animate.cancel()
             else:
@@ -514,8 +521,22 @@ PowerStress     {updater.get_current_pws}      {updater.get_latest_pws}
             elif cmd_l2 == 'list':
                 print('PowerStressTest versions on server :')
                 print('\n'.join([updater.ver_convert(updater.pws_regex,f.name)['ver'] for f in updater.get_pws_list]))
-        elif cmd_l1 == '-pvt':
-            pass
+        # elif cmd_l1 == '--pvt':
+        #     if cmd_l2 == 're':
+        #         updater.pvt_reinstall()
+        #     elif cmd_l2 == 'in':
+        #         version = cmd[2]
+        #         updater.pvt_install(version)
+        #     elif cmd_l2 == 'up':
+        #         updater.pvt_update()
+        #     elif cmd_l2 == 'un':
+        #         if len(cmd) ==3: 
+        #             updater.pvt_uninstall(cmd[2])
+        #         else:
+        #             updater.pvt_uninstall()
+        #     elif cmd_l2 == 'list':
+        #         print('WinPVT versions on server :')
+        #         print('\n'.join([updater.ver_convert(updater.pws_regex,f.name)['ver'] for f in updater.get_pws_list]))
         else:
             print(help_msg)
 
