@@ -1,17 +1,33 @@
 import server_models
 import client_models
+import json
 from uutinfo import Catuutinfo
+
 
 class Transfer(Catuutinfo):
 
+    @property
+    def server_connection(self):
+        return server_models.database.connect()
+
+    @property
+    def client_connection(self):
+        return client_models.database.connect()
+
+    def _update_uutinfo_server(self,data):
+        if self.server_connection:    
+            pass
+        else:
+            pass
+
+    def _update_uutinfo_client(self,data):
+        pass
+
     def update_uutinfo(self):
-        info = self.get_all_info()
-
-    def update_info(self):
-        info = self._get_info()
-
-    def update_drivers(self):
-        info = self._get_drivers()
+        data  = self.dump()
+        
+        
+    
 
 
 
