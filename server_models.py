@@ -1,4 +1,5 @@
 import requests
+from requests.auth import HTTPBasicAuth
 from uutinfo import Catuutinfo
 import datetime
 import uuid
@@ -11,7 +12,8 @@ class TaskServer(Catuutinfo):
     aps_url = 'http://127.0.0.1:8000/api/aps/'
     task_status_url = 'http://127.0.0.1:8000/api/taskstatus/'
 
-    def __init__(self):
+    def __init__(self,user,password):
+        self.auth = HTTPBasicAuth(user,password)
         self._get_info()
 
     @property
@@ -51,33 +53,61 @@ class TaskServer(Catuutinfo):
             print('not task group on server')
             return None
 
-    def add(self,script_name,status='wait',assigner=None,task_group=None,power_cycle_info=None,ap=None):
-        uut = self.get_uut
-        script = self.get_script(script_name)
-        task_status = self.get_taskstatus(status)
+    def add(self,script_name,task_group=None,ssid=None):
+        sn = self.info['bios'][0].serialnumber
+        script = script_name
         uutinfo = self.dump()
-        start_time = datetime.datetime.now()
-        series=None
-        if not task_group:
-            task_group = uuid.uuid4()
-        else:
-            tasks = self.get_task_by_taskgroup(task_group)
-            if tasks:
-                task_group = tasks[0]['task_group'] 
-                series = max([task['group_series'] for task in tasks]) + 1
-        
-        
+        r = requests.post(self.tasks_url,json={"sn":sn,"script":script,"ssid":ssid,"task_group":task_group,"uut_info":uutinfo},auth = self.auth)
+        print(r.status_code)#200
+        return r
 
+    def edit(self,task_id,script_name=None,task_group=None,group_series=None,uut_info=None,power_cycle_info=None,start=False,finish=False,log=None):
+        data ={}
+        script = script_name
+        if start:
+            data.update({'start_time':datetime.datetime.now()})
+        if finish:
+            data.update({'finish_time':datetime.datetime.now()})
 
-        r = requests.post(self.tasks_url,data={"uut":uut,"script":script,"status":task_status,"ap":ap,"assigner":assigner,"task_group":task_group,"group_series":series})
-        print(r)
+        data.update({
+            'script':script_name,
+            'task_group':task_group,
+            'group_series':group_series,
+            'uut_info':uut_info,
+            'power_cycle_info':power_cycle_info,
+        })
+        r = requests.put(self.tasks_url+rf'{task_id}/',data=data)
+        print(r.status_code)#200
+        return r
+
+    def delete(self,task_id):
+        r = requests.delete(self.tasks_url+rf'{task_id}/')
+        print(r.status_code)#204
+        return r
+
+    def add_issue(self,task_id):
+        pass
+
+    def edit_issue(self,issue_id):
+        pass
+
+    def delete_issue(self,issue_id):
+        pass
+
 
     # def change(self,)
 
+def testpost():
+    task = TaskServer('admin','admin')
+    r = task.add('Interface+Web+om')
+
+def testedit():
+    task = TaskServer('admin','admin')
+    r = task.edit(4,finish=True)
+
+def testedit():
+    task = TaskServer('admin','admin')
+    r = task.delete(4)
 
 if __name__ == '__main__':
-    task = Task()
-    # print(task.get_script('Interface+Web+Random'))
-    r = requests.put(task.task_status_url,data={"id":7,"task_status":"QUICK"})
-    print(r.json())
-    print(r.content)
+    testedit()
