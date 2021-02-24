@@ -432,8 +432,8 @@ class Updater(CommSite,Catuutinfo):
                 current_pws = self.get_current_pws_file
                 if current_pws: self.pws_uninstall(file=self.get_current_pws_file)
                 download_files.append(self.get_latest_pws)
-            if self.winpvt_can_update:
-                download_files.append(self.get_latest_winpvt)
+            # if self.winpvt_can_update:
+            #     download_files.append(self.get_latest_winpvt)
 
             download_processes = None if not download_files else [executor.submit(self.download,dest_path,file) for file in download_files] 
             if download_processes:
