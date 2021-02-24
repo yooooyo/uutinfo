@@ -43,6 +43,13 @@ class TaskServer(Catuutinfo):
         else:
             print('not found script on server')
             return None
+    @property
+    def get_scripts(self):
+        r = requests.get(self.scripts_url,params={'scripts':'scripts'}).json()
+        if r['count'] >= 1: return [script['name'] for script in r['results']]
+        else:
+            print('not found scripts on server')
+            return None
 
     def get_ap_by_ssid(self,ssid):
         r = requests.get(self.aps_url,params={'ssid':ssid}).json()
@@ -72,29 +79,32 @@ class TaskServer(Catuutinfo):
             print('not found group name on server')
             return None
 
-    def add(self,script_name,group_uuid=None,group_name=None,ssid=None):
+    def add(self,script_name,status='wait',group_uuid=None,group_name=None,ssid=None):
         sn = self.info['bios'][0].serialnumber
         script = script_name
         uutinfo = self.dump()
-        r = requests.post(self.tasks_url,json={"sn":sn,"script":script,"ssid":ssid,"group_uuid":group_uuid,"group_name":group_name,"uut_info":uutinfo},auth = self.auth)
+        start_time=None if not (status=='run') else str(datetime.datetime.now())
+        r = requests.post(self.tasks_url,json={"sn":sn,"script":script,"status":status,"ssid":ssid,"group_uuid":group_uuid,"group_name":group_name,"uut_info":uutinfo,"start_time":start_time},auth = self.auth)
         self._print_status_json(r)
         return r
 
-    def edit(self,task_id,script_name=None,status=None,ssid=None,group_uuid=None,group_name=None,uut_info=None,power_cycle_info=None,start=False,finish=False,log=None):
+    def edit(self,task_id,script_name=None,status=None,ssid=None,group_uuid=None,group_name=None,uutinfo:bool=False,power_cycle_info=None,start=False,finish=False,log=None):
         data ={}
         script = script_name
         if start:
             data.update({'start_time':datetime.datetime.now()})
         if finish:
             data.update({'finish_time':datetime.datetime.now()})
-
+        if uutinfo:
+            uutinfo = self.dump()
+            uutinfo = json.dumps(uutinfo)
         data.update({
-            'script':script_name,
+            'script':script,
             'status':status,
             'group_uuid':group_uuid,
             'group_name':group_name,
             'ssid':ssid,
-            'uut_info':uut_info,
+            'uutinfo':uutinfo,
             'power_cycle_info':power_cycle_info,
         })
         r = requests.put(self.tasks_url+rf'{task_id}/',data=data,auth=self.auth)
@@ -126,22 +136,40 @@ class TaskServer(Catuutinfo):
     def run(self,task_id):
         self.edit(task_id,status='run',start=True)
 
-    def run_error(self,task_id):
+    @property
+    def get_current_id(self):
+        current = self.current.json()
+        if current.get('count',None) == 1:
+            return current['results'][0]['id']
+        return None
+
+    def run_error(self,task_id=None):
+        if not task_id:
+            task_id = self.get_current_id
         self.edit(task_id,status='run_error')
 
-    def finish(self,task_id):
+    def finish(self,task_id=None):
+        if not task_id:
+            task_id = self.get_current_id
         self.edit(task_id,status='finish',finish=True)
 
-    def pause(self,task_id):
+    def pause(self,task_id=None):
+        if not task_id:
+            task_id = self.get_current_id
         self.edit(task_id,status='pause')
 
-    def skip(self,task_id):
+    def skip(self,task_id=None):
+        if not task_id:
+            task_id = self.get_current_id
         self.edit(task_id,status='skip')
 
-    def script_not_found(self,task_id):
+    def script_not_found(self,task_id=None):
+        if not task_id:
+            task_id = self.get_current_id
         self.edit(task_id,status='script not found on local')
 
-    def add_issue(self,task_id:int,title:str=None,level:str=None,power_state:str=None,device_driver:dict=None,function:str=None,description:str=None):
+    def add_issue(self,task_id:int=None,title:str=None,level:str=None,power_state:str=None,device_driver:dict=None,function:dict=None,description:str=None):
+        task_id = self.get_current_id if not task_id else task_id
         data={
             'task':task_id,
             'title':title,
@@ -207,39 +235,43 @@ def testdeleteissue():
     if r.status_code != 204:
         print(json.dumps( r.json(),indent=4))
 
-help='''
-help                                                                print help
-add                 /script </group_uuid> </group_name> </ssid>     add task by group_uuid or group_name 
-edit                /id </group_uuid> </group_name> </ssid>         add task by group_uuid or group_name 
-run                 /id                                             edit task status run
-run_error           /id                                             edit task status run_error
-finish              /id                                             edit task status finish
-pause               /id                                             edit task status pause
-skip                /id                                             edit task status skip
-script_not_found    /id                                             edit task status script not found
-tasks                                                               list tasks
-current                                                             get current task
-'''
+def testgetscripts():
+    task = TaskServer('admin','admin')
+    scripts = task.get_scripts
+    print(scripts)
 
 def test():
-    testeditissue()
+    testgetscripts()
 
-if __name__ == '__main__':
+def main():
+    task = TaskServer('admin','admin')
+    scripts = task.get_scripts
     parser = argparse.ArgumentParser()
+    parser.usage = \
+'''
+Create task and run:
+    server_models.exe create <script name> -run
+When issue occures:
+    server_models.exe createissue -title <title> -power_state <state> -description <description>
+Finish the task:
+    server_models.exe finish
+'''
     sub_parsers = parser.add_subparsers(title='TASK',dest = 'cmd')
     add_parsers = sub_parsers.add_parser('create',help='create a task')
-    add_parsers.add_argument('script',type=str,help='script name')
+    add_parsers.add_argument('script',type=str,help='script name',choices=scripts)
     add_parsers.add_argument('-ssid',type=str,help='wifi ssid')
+    add_parsers.add_argument('-status',type=str,help='task status',choices=['run','wait','finish','pause','skip','script not found','run error'],default='wait')
     addtask_exclu_gro = add_parsers.add_mutually_exclusive_group()
-    addtask_exclu_gro.add_argument('-group_uuid',type=str)
-    addtask_exclu_gro.add_argument('-group_name',type=str)
+    addtask_exclu_gro.add_argument('-group_uuid',type=str,help='add a task to a task group by group uuid')
+    addtask_exclu_gro.add_argument('-group_name',type=str,help='add a task to a task group by group name')
+    addtask_exclu_gro.add_argument('-run',action='store_true',help='create a task then set status to run')
 
     edit_parsers = sub_parsers.add_parser('update',help='update a task')
     edit_parsers.add_argument('id',type=int,help='task id')
-    edit_parsers.add_argument('-script',type=str,help='script name')
-    edit_parsers.add_argument('-status',type=str,help='script status',choices=['run','wait','finish','pause','skip','script not found','run error'])
+    edit_parsers.add_argument('-script',type=str,help='script name',choices=scripts)
+    edit_parsers.add_argument('-status',type=str,help='task status',choices=['run','wait','finish','pause','skip','script not found','run error'])
     edit_parsers.add_argument('-ssid',type=str,help='wifi ssid')
-    edit_parsers.add_argument('-uutinfo',type=str,help='unit info format as json')
+    edit_parsers.add_argument('-uutinfo',help='unit info format as json',action='store_true')
     edit_parsers.add_argument('-power_cycle_info',type=str,help='unit power cycle info format as json')
     edit_parsers.add_argument('-start',type=bool,help='change task status start')
     edit_parsers.add_argument('-finish',type=bool,help='change task status finish')
@@ -253,29 +285,29 @@ if __name__ == '__main__':
     edit_parsers = sub_parsers.add_parser('run',help='report run a task')
     edit_parsers.add_argument('id',help='task id')
 
-    edit_parsers = sub_parsers.add_parser('run_error',help='report a task run error when start or running')
-    edit_parsers.add_argument('id',help='task id')
+    edit_parsers = sub_parsers.add_parser('run_error',help='report a task run error when starting or running')
+    edit_parsers.add_argument('-id',help='task id')
 
     edit_parsers = sub_parsers.add_parser('finish',help='report a task finish')
-    edit_parsers.add_argument('id',help='task id')
+    edit_parsers.add_argument('-id',help='task id')
 
     edit_parsers = sub_parsers.add_parser('pause',help='report a task pause')
-    edit_parsers.add_argument('id',help='task id')
+    edit_parsers.add_argument('-id',help='task id')
 
     edit_parsers = sub_parsers.add_parser('skip',help='report a task be skipped')
-    edit_parsers.add_argument('id',help='task id')
+    edit_parsers.add_argument('-id',help='task id')
 
     edit_parsers = sub_parsers.add_parser('script_not_found',help='report a script not found in local')
-    edit_parsers.add_argument('id',help='task id')
+    edit_parsers.add_argument('-id',help='task id')
 
     issuecreate_parsers = sub_parsers.add_parser('issuecreate',help='create a issue')
-    issuecreate_parsers.add_argument('id',help='task id')
+    issuecreate_parsers.add_argument('-id',help='task id')
     issuecreate_parsers.add_argument('-title',help='issue title')
     issuecreate_parsers.add_argument('-level',help='issue level')
-    issuecreate_parsers.add_argument('-power_state',help='what power state occur issue')
+    issuecreate_parsers.add_argument('-power_state',help='what power state occur issue',choices=['s0','s0i3','s3','s4','s5','g3','restart'])
     issuecreate_parsers.add_argument('-device_driver',help='what device and driver occur issue')
     issuecreate_parsers.add_argument('-function',help='what function issues occur, format as json')
-    issuecreate_parsers.add_argument('-description',help='issue description')
+    issuecreate_parsers.add_argument('-description',help='issue description')   
 
     issueupdate_parsers = sub_parsers.add_parser('issueupdate',help='update issue info')
     issueupdate_parsers.add_argument('id',help='issue id')
@@ -288,12 +320,16 @@ if __name__ == '__main__':
 
     sub_parsers.add_parser('list',help='list tasks')
     sub_parsers.add_parser('current',help='list current task')
+    # sub_parsers.add_parser('scripts',help='list scripts')
 
     args = parser.parse_args()
 
-    task = TaskServer('admin','admin')
+
     if args.cmd == 'create':
-        task.add(args.script,args.group_uuid,args.group_name,args.ssid)
+        status = args.status
+        if args.run:
+            status = 'run'
+        task.add(args.script,status,args.group_uuid,args.group_name,args.ssid)
     elif args.cmd =='update':
         task.edit(args.id,args.script,args.status,args.ssid,args.group_uuid,args.group_name,args.uutinfo,args.power_cycle_info,args.start,args.finish)
     elif args.cmd == 'delete':
@@ -314,6 +350,11 @@ if __name__ == '__main__':
         task.tasks
     elif args.cmd == 'current':
         task.current
-    elif args.cmd == 'list':
-        task.tasks
-    
+    elif args.cmd == 'issuecreate':
+        task.add_issue(args.id,args.title,args.level,args.power_state,args.device_driver,args.function,args.description)
+    elif args.cmd == 'issueupdate':
+        task.edit_issue(args.id,args.title,args.level,args.power_state,args.device_driver,args.function,args.description)
+        
+if __name__ == '__main__':
+    main()
+    # test()
