@@ -7,3 +7,4 @@ makefile.bat
 build
 uutinfo.spec
 __pycache__
+capture_module

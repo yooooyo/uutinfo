@@ -17,7 +17,13 @@ class Catuutinfo:
         Win32_PnPSignedDriver
         Win32_NetworkAdapter
         '''
-
+        '''
+        wwan case:
+        ude
+        modem
+        qmux (mostly Qualcomm) above gnss
+        gnss
+        '''
 
     @property
     def devquery_dict(self):
@@ -163,6 +169,71 @@ if __name__ == "__main__":
             print(help)
     else:
         print(help)
+
+query = 
+'''
+{
+    "base":"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ",
+    "wlan":{
+        "class":["deviceclass='net'"],
+        "intel":[
+            "description like '%intel%' and description like '%wireless%'",
+            "description like '%intel%' and description like '%wi-fi%'"
+        ],
+        "realtek":[
+            "description like '%realtek%' and description like '%802.11%'"
+        ]
+    },
+    "modem":{
+        "class":["deviceclass='System'"],
+        "modem":[
+            "Description like '%ModemControl%'"
+        ]
+    },
+    "bordband":{
+        "class":["deviceclass='net'"],
+        "bordband":[
+            "Description like '%Mobile Broadband%'"
+        ]
+    },
+    "ude":{
+        "class":["deviceclass='net'","deviceclass='usb'"],
+        "bordband":[
+            "Description like '%UDE%'"
+        ]
+    },
+    "gnss":{
+        "class":["deviceclass='net'","deviceclass='usb'"],
+        "bordband":[
+            "Description like '%UDE%'"
+        ]
+    },
+    "qmux":{
+        "class":["deviceclass='net'","deviceclass='usb'"],
+        "bordband":[
+            "Description like '%UDE%'"
+        ]
+    },
+    "wwan_root":{
+        "class":["deviceclass='sample'","deviceclass='usb'"],
+        "bordband":[
+            "Description like '%UDE%'"
+        ]
+    },
+    "nfc":{
+        "class":[],
+        "nfc":[
+
+        ]
+    },
+    "rfid":{
+        "class":[],
+        "rfid":[
+            
+        ]
+    }
+}
+'''
     
 
     
