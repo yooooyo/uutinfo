@@ -105,6 +105,9 @@ class Catuutinfo:
         data.update(convert(self.drivers))
         if data.get('wwan_net',None):
             data['wwan_net'][0].update({'Firmware':self._get_wwan_firmware})
+        data.update({'wwan':{'wwan_cat':data.pop('wwan_cat')}})
+        data['wwan'].update({'wwan_net':data.pop('wwan_net')})
+        data['wwan'].update({'modem':data.pop('modem')})
         return data
 
     def to_csv(self,filename='uutinfo.csv'):
