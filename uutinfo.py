@@ -1,13 +1,30 @@
-from os.path import expanduser
-from sys import argv
-from win32com.client.gencache import __init__
 import wmi
-import json
-import os
-import re
+from json import loads,dumps
+from os import path
+from os import popen
+from re import findall
 import pprint
+import argparse
+import pythoncom
 
-class Catuutinfo:
+
+import threading
+from time import sleep
+class Info(threading.Thread):
+  def __init__ (self,query):
+    threading.Thread.__init__ (self)
+    self.query = query
+  def run(self):
+    pythoncom.CoInitialize()
+    try:
+      c = wmi.WMI()
+      self.instances = c.query(self.query)
+    except Exception as e:
+        print(e)
+    finally:
+      pythoncom.CoUninitialize()
+
+class Catuutinfo():
 
     def __init__(self):
         '''
@@ -18,31 +35,51 @@ class Catuutinfo:
         Win32_NetworkAdapter
         '''
 
-
-    @property
-    def devquery_dict(self):
-        query = None
-        devicequery = os.path.join(os.path.dirname(__file__),'DeviceQuery.json')
-        if os.path.exists(devicequery):
-            with open(devicequery) as devquery:
-                try:
-                    query = json.loads(devquery.read())
-                except Exception as e:
-                    print(e)
+    def devquery_dict(self,query = None):
+        if query:
+            pass
         else:
-            query = {
-                "base":r"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ",
-                "wlan":r"(deviceclass='net' and ((description like '%intel%' and description like '%wireless%') or (description like '%intel%' and description like '%wi-fi%') or (description like '%realtek%' and description like '%802.11%')))",
-                "modem":r"(deviceclass='System' and  (Description like '%ModemControl%'))",
-                "wwan_cat":r"(deviceclass='System' and  (Description like '%7360%' or Description like '%7560%' or Description like '%xmm%'))",
-                "lan":r"(deviceclass='net' and ((description like '%intel%' and description like '%ethernet%') or (description like '%realtek%' and description like '%gbe%')))",
-                "wwan_net":r"(deviceclass='net' and (Description like '%Mobile Broadband%'))",
-                "ble":r"(deviceclass='Bluetooth' and ((description like '%intel%') or (description like '%realtek%')))",
-                "nfc":r"(deviceclass='Proximity')",
-                "rfid":r"(deviceclass='HIDClass' and HardWareID like '%0C27%')",
-                "gnss":r"(deviceclass='Sensor' and DeviceName like '%GNSS%')"
-            }
+            devicequery = path.join(path.dirname(__file__),'DeviceQuery.json')
+            if path.exists(devicequery):
+                with open('DeviceQuery.json','r') as query:
+                    print('Use DeviceQuery.json')
+                    try:
+                        query = query.read()
+                        query = dict(loads(query))
+                        base = ''
+                        for k1,v1 in query.items():
+                            if k1 != 'base':
+                                values = []
+                                for value in v1.values():
+                                    v = r' or '.join(value)
+                                    v = r'(' + v + r')' if v else v
+                                    if v:
+                                        values.append(v)
+                                values = base + r' and '.join(values)
+                                query.update({k1:values})
+                            else:
+                                base = v1
+                        query.pop('base')
+                        return query
+                    except Exception as e:
+                        print(e)
+            else:
+                print('Use default query string')
+                query = {
+                    'wlan': r"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ((deviceclass='net')) and ((description like '%intel%' and description like '%wireless%') or (description like '%intel%' and description like '%wi-fi%') or (description like '%realtek%' and description like '%802.11%'))",                
+                    'modem': r"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ((deviceclass='System')) and ((Description like '%ModemControl%'))",                
+                    'bordband': r"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ((deviceclass='net')) and ((Description like '%Mobile Broadband%'))",
+                    'ude': r"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ((deviceclass='net') or (deviceclass='usb')) and ((Description like '%UDE%'))",                
+                    "wwan_net":r"(deviceclass='net' and (Description like '%Mobile Broadband%'))",
+                    'gnss': r"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ((deviceclass='system') or (deviceclass='sensor')) and ((Description like '%GNSS%'))",
+                    'qmux': r"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ((deviceclass='system')) and ((Description like '%QMUX%'))",                
+                    'nfc': r"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ((deviceclass='Proximity'))",
+                    'rfid': r"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ((deviceclass='HIDClass')) and ((HardWareID like '%0C27%'))"
+                }
         return query
+
+    def update_device_query(self):
+        pass
 
     def _get_info(self):
         w  =  wmi.WMI()
@@ -64,12 +101,21 @@ class Catuutinfo:
         self.info = {key:getattr(w,value)(self.target_wmi_class_properties_list[key],**self.wmi_class_where_conditions[key]) for key,value in self.target_wmi_classes.items()}
 
     def _get_drivers(self):
-        w  =  wmi.WMI()
-        self.drivers = {k:w.query(self.devquery_dict['base']+v) for k,v in self.devquery_dict.items() if k != 'base'}
+        self.drivers = dict()
+        for k,v in self.devquery_dict().items():
+            instance = Info(v)
+            instance.start()
+            self.drivers.update({k:instance})
+
+        for k,v in self.drivers.items():
+            v.join()
+            self.drivers.update({k:v.instances})
+
+        
 
     # def _get_drivers_pool(self):
     #     pythoncom.CoInitialize()
-    #     tasks = {k:threading.Thread(target = wmi.WMI().query,args=(self.devquery_dict['base']+v,)) for k,v in self.devquery_dict.items() if k != 'base'}
+    #     tasks = {k:threading.Thread(target = wmi.WMI().query,args=(self.devquery_dict()['base']+v,)) for k,v in self.devquery_dict().items() if k != 'base'}
         
     #     _ = [task.start() for task in tasks.values()]
     #     _ = [task.join() for task in tasks.values()]
@@ -86,11 +132,12 @@ class Catuutinfo:
 
     @property
     def _get_wwan_firmware(self):
-        data = re.findall('Firmware Version       :(.+)\s',os.popen('netsh mbn sh inter').read())
+        data = findall('Firmware Version       :(.+)\s',popen('netsh mbn sh inter').read())
         if data:
             return data[0].strip()
         else:
             return ''
+
     def print_properties(self,wmi_object:wmi._wmi_object):
         for p in wmi_object.properties:
             v = getattr(wmi_object,p)
@@ -103,35 +150,51 @@ class Catuutinfo:
         convert = lambda x:{typ:{cnt:{p:getattr(obj,p,None) for p in obj.properties} for cnt,obj in enumerate(objs)} for typ,objs in x.items()}
         data.update(convert(self.info))
         data.update(convert(self.drivers))
-        if data.get('wwan_net',None):
-            data['wwan_net'][0].update({'Firmware':self._get_wwan_firmware})
+        data.update({'firmware':self._get_wwan_firmware})
+        merge=['wwan_root','modem','bordband','ude','gnss','qmux','firmware']
+        wwan = {}
+        for i in merge:
+            wwan.update({i:data.pop(i)})
+        data.update({'wwan':wwan})
         return data
+    
+    def dump_to_json(self):
+        return dumps(self.dump(),indent=4)
+
+    def query_to_json(self):
+        return dumps(self.devquery_dict(),indent=4)
 
     def to_csv(self,filename='uutinfo.csv'):
         self.get_all_info()
         with open(filename,'w+') as f:
-            f.write(json.dumps(self.dump(),indent=4))
+            f.write(dumps(self.dump(),indent=4))
 
-    def query_to_json(self):
-        content = json.dumps(self.devquery_dict,indent=4)
-        with open('DeviceQuery.json','w+') as f:
-            f.write(content)
-            print(f'output: {os.path.realpath(f.name)}')
+    def query_save_to_json(self,file_name='DeviceQuery.json',data=None):
+        data = self.query_to_json()
+        with open(file_name,'w+') as f:
+            f.write(data)
+            print(f'output: {path.realpath(f.name)}')
 
-    def to_json(self,filename='uutinfo.json'):
+    def dump_save_to_json(self,filename='uutinfo.json',data = None):
+        if not data:
+            data = self.dump_to_json()
         with open(filename,'w+') as f:
-            f.write(json.dumps(self.dump(),indent=4))
-            print(f'output: {os.path.realpath(f.name)}')
+            f.write(data)
+            print(f'output: {path.realpath(f.name)}')
 
-# def run():
-#     catuut = Catuutinfo()    
-#     catuut.to_json()
-#     # try:
-#     #     m = Member.get(Member.user==7)
-#     #     print(m.usernameincompany)
-#     # except Exception as e:
-#     #     print(e)
-#     # print('hello')
+    
+
+
+
+def run():
+    catuut = Catuutinfo()    
+    catuut.to_json()
+    # try:
+    #     m = Member.get(Member.user==7)
+    #     print(m.usernameincompany)
+    # except Exception as e:
+    #     print(e)
+    # print('hello')
         
 help='''
 dump                |  print uutinfo data
@@ -142,24 +205,50 @@ export json         |  export uutinfo data as json file
 '''
 
 
+def run():
+    uutinfo = Catuutinfo()
+    parser = argparse.ArgumentParser()
+    subparser = parser.add_subparsers(title = 'UUT INFO',dest='cmd')
+    dump_parser = subparser.add_parser('dump',help='print or export module info')
+    dump_parser.add_argument('-export',help='export module info as json data',action='store_true')
+    query_parser = subparser.add_parser('query',help='print query string')
+    query_parser.add_argument('-export',help='export query stringas json data',action='store_true')
+    args = parser.parse_args()
+
+    if args.cmd == 'dump':
+        data = uutinfo.dump_to_json()
+        print(data)
+        if args.export:
+            uutinfo.dump_save_to_json(dump=data)
+    elif args.cmd == 'query':
+        data = uutinfo.query_to_json()
+        print(data)
+        if args.export:
+            uutinfo.query_save_to_json(data=data)
+
+def test():
+    # print('In Main Thread')
+    # c = wmi.WMI()
+    # Info().start()
+    # for process in c.Win32_Process():
+    #     print('M',process.ProcessId, process.Name)
+
+    # info = Catuutinfo()
+    # info._get_drivers()
+    # print(info.drivers)
+    # query = Catuutinfo().devquery_dict()
+    # instances = []
+    # for v in query.values():
+    #     instance = Info(v)
+    #     instances.append(instance)
+    #     instance.start()
+    uutinfo = Catuutinfo()
+    # uutinfo.get_all_info()
+    data = dumps(uutinfo.dump(),indent=4)
+    print(data)
+    
 if __name__ == "__main__":
-    cmds=['help','export','query','dump']
-    pp = pprint.PrettyPrinter(indent=4)
-    if argv and len(argv)>1 and argv[1] in cmds:
-        if argv[1] == 'export':
-            if argv[2] in ['json','query-json']:
-                if argv[2] == 'json':
-                    Catuutinfo().to_json()
-                elif argv[2] == 'query-json':
-                    Catuutinfo().query_to_json()
-        elif argv[1] == 'dump':
-            pp.pprint(Catuutinfo().dump())
-        elif argv[1] == 'query':
-            pp.pprint(Catuutinfo().devquery_dict)
-        else:
-            print(help)
-    else:
-        print(help)
+    run()
     
 
     

@@ -1,0 +1,57 @@
+{
+    "base":"SELECT * FROM WIN32_PNPSIGNEDDRIVER WHERE ",
+    "wlan":{
+        "class":["(deviceclass='net')"],
+        "wlan":[
+            "(description like '%intel%' and description like '%wireless%')",
+            "(description like '%intel%' and description like '%wi-fi%')",
+            "(description like '%realtek%' and description like '%802.11%')"
+        ]
+    },
+    "modem":{
+        "class":["(deviceclass='System')"],
+        "modem":[
+            "(Description like '%ModemControl%')"
+        ]
+    },
+    "bordband":{
+        "class":["(deviceclass='net')"],
+        "bordband":[
+            "(Description like '%Mobile Broadband%')"
+        ]
+    },
+    "ude":{
+        "class":["(deviceclass='net')","(deviceclass='usb')"],
+        "ude":[
+            "(Description like '%UDE%')"
+        ]
+    },
+    "gnss":{
+        "class":["(deviceclass='system')","(deviceclass='sensor')"],
+        "gnss":[
+            "(Description like '%GNSS%' and not Description like '%QMUX%') "
+        ]
+    },
+    "qmux":{
+        "class":["(deviceclass='system')"],
+        "bordband":[
+            "(Description like '%QMUX%')"
+        ]
+    },
+    "wwan_root":{
+        "class":["(deviceclass='sample')","(deviceclass='system')"],
+        "root":[
+            "(Description like '%SDX55%')"
+        ]
+    },
+    "nfc":{
+        "class":["(deviceclass='Proximity')"],
+        "nfc":[
+        ]
+    },
+    "rfid":{
+        "class":["(deviceclass='HIDClass')"],
+        "rfid":["(HardWareID like '%0C27%')"]
+    }
+}
+            
