@@ -88,8 +88,10 @@ class TaskServer(Catuutinfo):
         self._print_status_json(r)
         return r
 
-    def edit(self,task_id,script_name=None,status=None,ssid=None,group_uuid=None,group_name=None,uutinfo:bool=False,power_cycle_info=None,start=False,finish=False,log=None):
+    def edit(self,task_id=None,script_name=None,status=None,ssid=None,group_uuid=None,group_name=None,uutinfo:bool=False,power_cycle_info=None,start=False,finish=False,log=None):
         data ={}
+        if not task_id:
+            task_id = self.get_current_id
         script = script_name
         if start:
             data.update({'start_time':datetime.datetime.now()})
@@ -104,7 +106,7 @@ class TaskServer(Catuutinfo):
             'group_uuid':group_uuid,
             'group_name':group_name,
             'ssid':ssid,
-            'uutinfo':uutinfo,
+            'uut_info':uutinfo,
             'power_cycle_info':power_cycle_info,
         })
         r = requests.put(self.tasks_url+rf'{task_id}/',data=data,auth=self.auth)
@@ -168,8 +170,11 @@ class TaskServer(Catuutinfo):
             task_id = self.get_current_id
         self.edit(task_id,status='script not found on local')
 
-    def add_issue(self,task_id:int=None,title:str=None,level:str=None,power_state:str=None,device_driver:dict=None,function:dict=None,description:str=None):
+    def add_issue(self,task_id:int=None,title:str=None,level:str=None,power_state:str=None,device_driver:str=None,function:dict=None,description:str=None):
         task_id = self.get_current_id if not task_id else task_id
+        device_driver_info = self.dump()
+        select_device = device_driver_info.get(device_driver,None)
+        device_driver = device_driver_info if not select_device else select_device
         data={
             'task':task_id,
             'title':title,
@@ -179,11 +184,14 @@ class TaskServer(Catuutinfo):
             'function':function,
             'description':description
         }
-        r = requests.post(self.task_issue_url,data=data,auth=self.auth)
+        r = requests.post(self.task_issue_url,json=data,auth=self.auth)
         self._print_status_json(r)
         return r
 
-    def edit_issue(self,issue_id,title:str=None,level:str=None,power_state:str=None,device_driver:dict=None,function:str=None,description:str=None):
+    def edit_issue(self,issue_id,title:str=None,level:str=None,power_state:str=None,device_driver:str=None,function:str=None,description:str=None):
+        device_driver_info = self.dump()
+        select_device = device_driver_info.get(device_driver,None)
+        device_driver = device_driver_info if not select_device else select_device
         data={
             'title':title,
             'level':level,
@@ -192,7 +200,7 @@ class TaskServer(Catuutinfo):
             'function':function,
             'description':description
         }
-        r = requests.put(self.task_issue_url+f'{issue_id}/',auth=self.auth,data=data)
+        r = requests.put(self.task_issue_url+f'{issue_id}/',auth=self.auth,json=data)
         self._print_status_json(r)
         return r
 
@@ -247,15 +255,7 @@ def main():
     task = TaskServer('admin','admin')
     scripts = task.get_scripts
     parser = argparse.ArgumentParser()
-    parser.usage = \
-'''
-Create task and run:
-    server_models.exe create <script name> -run
-When issue occures:
-    server_models.exe createissue -title <title> -power_state <state> -description <description>
-Finish the task:
-    server_models.exe finish
-'''
+
     sub_parsers = parser.add_subparsers(title='TASK',dest = 'cmd')
     add_parsers = sub_parsers.add_parser('create',help='create a task')
     add_parsers.add_argument('script',type=str,help='script name',choices=scripts)
@@ -267,7 +267,7 @@ Finish the task:
     addtask_exclu_gro.add_argument('-run',action='store_true',help='create a task then set status to run')
 
     edit_parsers = sub_parsers.add_parser('update',help='update a task')
-    edit_parsers.add_argument('id',type=int,help='task id')
+    edit_parsers.add_argument('-id',type=int,help='task id')
     edit_parsers.add_argument('-script',type=str,help='script name',choices=scripts)
     edit_parsers.add_argument('-status',type=str,help='task status',choices=['run','wait','finish','pause','skip','script not found','run error'])
     edit_parsers.add_argument('-ssid',type=str,help='wifi ssid')
@@ -305,7 +305,8 @@ Finish the task:
     issuecreate_parsers.add_argument('-title',help='issue title')
     issuecreate_parsers.add_argument('-level',help='issue level')
     issuecreate_parsers.add_argument('-power_state',help='what power state occur issue',choices=['s0','s0i3','s3','s4','s5','g3','restart'])
-    issuecreate_parsers.add_argument('-device_driver',help='what device and driver occur issue')
+    device_choices = ['wlan','bt','wwan','lan','nfc','rfid','all']
+    issuecreate_parsers.add_argument('-device_driver',help='what device and driver occur issue',choices=device_choices)
     issuecreate_parsers.add_argument('-function',help='what function issues occur, format as json')
     issuecreate_parsers.add_argument('-description',help='issue description')   
 
@@ -313,8 +314,8 @@ Finish the task:
     issueupdate_parsers.add_argument('id',help='issue id')
     issueupdate_parsers.add_argument('-title',help='issue title')
     issueupdate_parsers.add_argument('-level',help='issue level')
-    issueupdate_parsers.add_argument('-power_state',help='what power state occur issue')
-    issueupdate_parsers.add_argument('-device_driver',help='what device and driver occur issue')
+    issueupdate_parsers.add_argument('-power_state',help='what power state occur issue',choices=['s0','s0i3','s3','s4','s5','g3','restart'])
+    issueupdate_parsers.add_argument('-device_driver',help='what device and driver occur issue',choices=device_choices)
     issueupdate_parsers.add_argument('-function',help='what function issues occur, format as json')
     issueupdate_parsers.add_argument('-description',help='issue description')
 
@@ -323,7 +324,8 @@ Finish the task:
     # sub_parsers.add_parser('scripts',help='list scripts')
 
     args = parser.parse_args()
-
+    pass_code_list = [200,201,]
+    pass_code = 0
 
     if args.cmd == 'create':
         status = args.status
