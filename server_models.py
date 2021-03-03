@@ -131,8 +131,8 @@ class TaskServer(Catuutinfo):
     def delete(self,task_id):
         r = requests.delete(self.tasks_url+rf'{task_id}/',auth=self.auth)
         print(r.status_code)
-        ret = r.status_code == 204
-        return ret
+        #204  no resource
+        return r
 
     #task status
     def run(self,task_id):
@@ -324,38 +324,42 @@ def main():
     # sub_parsers.add_parser('scripts',help='list scripts')
 
     args = parser.parse_args()
-    pass_code_list = [200,201,]
-    pass_code = 0
+    pass_code_list = [200,201,204]
 
     if args.cmd == 'create':
         status = args.status
         if args.run:
             status = 'run'
-        task.add(args.script,status,args.group_uuid,args.group_name,args.ssid)
+        r = r = task.add(args.script,status,args.group_uuid,args.group_name,args.ssid)
     elif args.cmd =='update':
-        task.edit(args.id,args.script,args.status,args.ssid,args.group_uuid,args.group_name,args.uutinfo,args.power_cycle_info,args.start,args.finish)
+        r = task.edit(args.id,args.script,args.status,args.ssid,args.group_uuid,args.group_name,args.uutinfo,args.power_cycle_info,args.start,args.finish)
     elif args.cmd == 'delete':
-        task.delete(args.id)
+        r = task.delete(args.id)
     elif args.cmd == 'run':
-        task.run(args.id)
+        r = task.run(args.id)
     elif args.cmd == 'run_error':
-        task.run_error(args.id)
+        r = task.run_error(args.id)
     elif args.cmd == 'finish':
-        task.finish(args.id)
+        r = task.finish(args.id)
     elif args.cmd == 'pause':
-        task.pause(args.id)
+        r = task.pause(args.id)
     elif args.cmd == 'skip':
-        task.skip(args.id)
+        r = task.skip(args.id)
     elif args.cmd == 'script_not_found':
-        task.script_not_found(args.id)
+        r = task.script_not_found(args.id)
     elif args.cmd == 'list':
-        task.tasks
+        r = task.tasks
     elif args.cmd == 'current':
-        task.current
+        r = task.current
     elif args.cmd == 'issuecreate':
-        task.add_issue(args.id,args.title,args.level,args.power_state,args.device_driver,args.function,args.description)
+        r = task.add_issue(args.id,args.title,args.level,args.power_state,args.device_driver,args.function,args.description)
     elif args.cmd == 'issueupdate':
-        task.edit_issue(args.id,args.title,args.level,args.power_state,args.device_driver,args.function,args.description)
+        r = task.edit_issue(args.id,args.title,args.level,args.power_state,args.device_driver,args.function,args.description)
+        
+    if r.status_code in pass_code_list:
+        sys.exit(0)
+    else:
+        sys.exit(r.status_code)
         
 if __name__ == '__main__':
     main()
