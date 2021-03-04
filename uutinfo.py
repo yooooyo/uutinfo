@@ -1,11 +1,11 @@
 import wmi
 from json import loads,dumps
-from os import path
-from os import popen
+from os import path,popen
+import sys
 from re import findall
-import pprint
 import argparse
 import pythoncom
+import pathlib
 
 
 import threading
@@ -34,14 +34,25 @@ class Catuutinfo():
         Win32_PnPSignedDriver
         Win32_NetworkAdapter
         '''
+    @property
+    def _resource_path(self):
+        """ Get absolute path to resource, works for dev and for PyInstaller """
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = path.abspath(".")
+        return base_path
 
     def devquery_dict(self,query = None):
         if query:
             pass
         else:
-            devicequery = path.join(path.dirname(__file__),'DeviceQuery.json')
-            if path.exists(devicequery):
-                with open('DeviceQuery.json','r') as query:
+            queryStrFile     = path.join(path.dirname(__file__),'DeviceQuery.json')
+            queryStrFile_res = path.join(self._resource_path,'DeviceQuery.json')
+            queryStrFile = queryStrFile_res if path.exists(queryStrFile_res) else queryStrFile
+            if path.exists(queryStrFile):
+                with open(queryStrFile,'r') as query:
                     print('Use DeviceQuery.json')
                     try:
                         query = query.read()
@@ -132,7 +143,7 @@ class Catuutinfo():
 
     @property
     def _get_wwan_firmware(self):
-        data = findall('Firmware Version       :(.+)\s',popen('netsh mbn sh inter').read())
+        data = findall('\s*Firmware\s*Version\s*:\s*(.+)\s*',popen('netsh mbn sh inter').read())
         if data:
             return data[0].strip()
         else:

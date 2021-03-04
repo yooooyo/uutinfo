@@ -9,11 +9,11 @@
         ]
     },
     "bt":{
-	"class":["(deviceclass='Bluetooth')"],
-	"bt":[
-	    "(description like '%intel%')",
-	    "(description like '%realtek%')"
-	]
+        "class":["(deviceclass='Bluetooth')"],
+        "bt":[
+            "(description like '%intel%')",
+            "(description like '%realtek%')"
+        ]
     },
     "modem":{
         "class":["(deviceclass='System')"],
@@ -51,7 +51,7 @@
             "(Description like '%SDX55%')",
             "(Description like '%7360%')",
             "(Description like '%7560%')",
-            "(Description like '%Snapdragon%')",
+            "(Description like '%Snapdragon%') and not (Description like '%GNSS%')",
             "(Description like '%5G Solution%')"
         ]
     },
