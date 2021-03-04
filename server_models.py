@@ -46,10 +46,15 @@ class TaskServer(Catuutinfo):
     @property
     def get_scripts(self):
         r = requests.get(self.scripts_url,params={'scripts':'scripts'}).json()
-        if r['count'] >= 1: return [script['name'] for script in r['results']]
+        scripts = []
+        while True:
+            scripts.extend([script['name'] for script in r['results']])
+            if not r['next']: break
+            r = requests.get(r['next']).json()
         else:
             print('not found scripts on server')
             return None
+        return scripts
 
     def get_ap_by_ssid(self,ssid):
         r = requests.get(self.aps_url,params={'ssid':ssid}).json()
@@ -100,6 +105,8 @@ class TaskServer(Catuutinfo):
         if uutinfo:
             uutinfo = self.dump()
             uutinfo = json.dumps(uutinfo)
+        else:
+            uutinfo =None
         data.update({
             'script':script,
             'status':status,
@@ -136,7 +143,7 @@ class TaskServer(Catuutinfo):
 
     #task status
     def run(self,task_id):
-        self.edit(task_id,status='run',start=True)
+        return self.edit(task_id,status='run',start=True)
 
     @property
     def get_current_id(self):
@@ -148,27 +155,27 @@ class TaskServer(Catuutinfo):
     def run_error(self,task_id=None):
         if not task_id:
             task_id = self.get_current_id
-        self.edit(task_id,status='run_error')
+        return self.edit(task_id,status='run_error')
 
     def finish(self,task_id=None):
         if not task_id:
             task_id = self.get_current_id
-        self.edit(task_id,status='finish',finish=True)
+        return self.edit(task_id,status='finish',finish=True)
 
     def pause(self,task_id=None):
         if not task_id:
             task_id = self.get_current_id
-        self.edit(task_id,status='pause')
+        return self.edit(task_id,status='pause')
 
     def skip(self,task_id=None):
         if not task_id:
             task_id = self.get_current_id
-        self.edit(task_id,status='skip')
+        return self.edit(task_id,status='skip')
 
     def script_not_found(self,task_id=None):
         if not task_id:
             task_id = self.get_current_id
-        self.edit(task_id,status='script not found on local')
+        return self.edit(task_id,status='script not found on local')
 
     def add_issue(self,task_id:int=None,title:str=None,level:str=None,power_state:str=None,device_driver:str=None,function:dict=None,description:str=None):
         task_id = self.get_current_id if not task_id else task_id

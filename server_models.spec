@@ -3,10 +3,10 @@
 block_cipher = None
 
 
-a = Analysis(['server_models.py'],
+a = Analysis(['server_models.py','uutinfo.py'],
              pathex=['D:\\Work\\HP_Project\\uutinfo'],
              binaries=[],
-             datas=[],
+             datas=[('DeviceQuery.json', '.')],
              hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],
