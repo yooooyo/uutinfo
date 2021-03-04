@@ -8,6 +8,13 @@
             "(description like '%realtek%' and description like '%802.11%')"
         ]
     },
+    "bt":{
+        "class":["(deviceclass='Bluetooth')"],
+        "bt":[
+            "(description like '%intel%')",
+            "(description like '%realtek%')"
+        ]
+    },
     "modem":{
         "class":["(deviceclass='System')"],
         "modem":[
@@ -29,7 +36,7 @@
     "gnss":{
         "class":["(deviceclass='system')","(deviceclass='sensor')"],
         "gnss":[
-            "(Description like '%GNSS%' and not Description like '%QMUX%') "
+            "(Description like '%GNSS%' and not Description like '%QMUX%')"
         ]
     },
     "qmux":{
@@ -41,7 +48,11 @@
     "wwan_root":{
         "class":["(deviceclass='sample')","(deviceclass='system')"],
         "root":[
-            "(Description like '%SDX55%')"
+            "(Description like '%SDX55%')",
+            "(Description like '%7360%')",
+            "(Description like '%7560%')",
+            "(Description like '%Snapdragon%') and not (Description like '%GNSS%')",
+            "(Description like '%5G Solution%')"
         ]
     },
     "nfc":{
